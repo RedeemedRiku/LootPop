@@ -1,14 +1,10 @@
 local f = CreateFrame("Frame")
 local lootFrames = {}
-local lootData = {} 
+local lootData = {}
+local lastDisenchantItem = nil
 local settings = {
-    posX = 842,
-    posY = -300,
     spacing = 0,
     scale = 0.8,
-    frameWidth = 250,
-    iconSize = 16,
-    growUpward = true,
     maxEntries = 10,
     dynamicWidth = true,
     frameStrata = "DIALOG",
@@ -24,14 +20,12 @@ LootPopDB = LootPopDB or {
     frameStrata = "DIALOG",
 }
 
--- Declare variables that will be defined later
 local anchor, configFrame, xCoordEditBox, yCoordEditBox
 
--- Timer system
 local timerFrame = CreateFrame("Frame")
 local activeTimers = {}
-local function CreateTimer(delay, callback, lootKey)
-    table.insert(activeTimers, { timeLeft = delay, callback = callback, lootKey = lootKey })
+local function CreateTimer(delay, callback)
+    table.insert(activeTimers, { timeLeft = delay, callback = callback })
 end
 timerFrame:SetScript("OnUpdate", function(self, elapsed)
     for i = #activeTimers, 1, -1 do
@@ -44,12 +38,10 @@ timerFrame:SetScript("OnUpdate", function(self, elapsed)
     end
 end)
 
--- Helper function to round coordinates to nearest hundredth
 local function RoundCoordinate(value)
     return math.floor(value * 100 + 0.5) / 100
 end
 
--- Anchor functions
 local function SaveAllSettings()
     local left, top = anchor:GetLeft(), anchor:GetTop()
     if left and top then
@@ -83,7 +75,6 @@ local function UpdateCoordinateDisplay()
             local currentX = RoundCoordinate(left)
             local currentY = RoundCoordinate(top - UIParent:GetHeight())
             
-            -- Only update if the edit box doesn't have focus (so typing isn't interrupted)
             if not xCoordEditBox:HasFocus() then
                 xCoordEditBox:SetText(string.format("%.2f", currentX))
             end
@@ -94,13 +85,11 @@ local function UpdateCoordinateDisplay()
     end
 end
 
--- Frame to update coordinate display in real-time
 local coordUpdateFrame = CreateFrame("Frame")
 coordUpdateFrame:SetScript("OnUpdate", function(self, elapsed)
     UpdateCoordinateDisplay()
 end)
 
--- Create anchor
 anchor = CreateFrame("Frame", nil, UIParent)
 anchor:SetSize(200, 30)
 anchor:SetPoint("TOPLEFT", UIParent, "TOPLEFT", LootPopDB.anchorX or 842, LootPopDB.anchorY or -300)
@@ -140,7 +129,6 @@ cornerIndicator:SetTexture("Interface\\Buttons\\WHITE8X8")
 cornerIndicator:SetVertexColor(1, 0, 0, 1)
 anchor:Hide()
 
--- Event handler
 local addonFrame = CreateFrame("Frame")
 addonFrame:RegisterEvent("ADDON_LOADED")
 addonFrame:RegisterEvent("PLAYER_LOGOUT")
@@ -152,7 +140,6 @@ addonFrame:SetScript("OnEvent", function(self, event, addonName)
     end
 end)
 
--- Config frame
 configFrame = CreateFrame("Frame", "LootPopConfig", UIParent)
 configFrame:SetSize(350, 380)
 configFrame:SetPoint("CENTER")
@@ -179,7 +166,6 @@ local title = configFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 title:SetPoint("TOP", 0, -16)
 title:SetText("LootPop Configuration")
 
--- Helper function for sliders
 local function CreateSlider(parent, name, width, height, x, y, minVal, maxVal, currentVal, step, labelText)
     local slider = CreateFrame("Slider", name, parent)
     slider:SetSize(width, height)
@@ -216,7 +202,6 @@ local function CreateSlider(parent, name, width, height, x, y, minVal, maxVal, c
     return slider, text
 end
 
--- Scale slider
 local scaleSlider, scaleText = CreateSlider(configFrame, "LootPopScaleSlider", 200, 20, 20, -50, 0.5, 2.0, settings.scale, 0.1, "Scale")
 scaleSlider:SetScript("OnValueChanged", function(self, value)
     settings.scale = value
@@ -224,7 +209,6 @@ scaleSlider:SetScript("OnValueChanged", function(self, value)
     SaveAllSettings()
 end)
 
--- Spacing slider
 local spacingSlider, spacingText = CreateSlider(configFrame, "LootPopSpacingSlider", 200, 20, 20, -100, 0, 20, settings.spacing, 1, "Spacing")
 spacingSlider:SetScript("OnValueChanged", function(self, value)
     settings.spacing = value
@@ -232,7 +216,6 @@ spacingSlider:SetScript("OnValueChanged", function(self, value)
     SaveAllSettings()
 end)
 
--- Max entries
 local maxEntriesLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 maxEntriesLabel:SetPoint("TOPLEFT", 20, -140)
 maxEntriesLabel:SetText("Max Entries:")
@@ -254,7 +237,6 @@ maxEntriesEditBox:SetScript("OnEnterPressed", function(self)
     self:ClearFocus()
 end)
 
--- Dynamic width checkbox
 local dynamicWidthCheckbox = CreateFrame("CheckButton", "LootPopDynamicWidthCheckbox", configFrame, "UICheckButtonTemplate")
 dynamicWidthCheckbox:SetPoint("TOPLEFT", 20, -170)
 dynamicWidthCheckbox:SetChecked(settings.dynamicWidth)
@@ -264,7 +246,6 @@ dynamicWidthCheckbox:SetScript("OnClick", function(self)
     SaveAllSettings()
 end)
 
--- Frame strata dropdown
 local frameStrataLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 frameStrataLabel:SetPoint("TOPLEFT", 20, -200)
 frameStrataLabel:SetText("Frame Strata:")
@@ -291,7 +272,6 @@ UIDropDownMenu_Initialize(frameStrataDropdown, InitializeStrataDropdown)
 UIDropDownMenu_SetWidth(frameStrataDropdown, 120)
 UIDropDownMenu_SetText(frameStrataDropdown, settings.frameStrata)
 
--- X/Y Coordinate inputs
 local xCoordLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 xCoordLabel:SetPoint("TOPLEFT", 20, -240)
 xCoordLabel:SetText("Anchor X:")
@@ -330,7 +310,6 @@ yCoordEditBox:SetScript("OnEnterPressed", function(self)
     self:ClearFocus()
 end)
 
--- Buttons
 local resetPosBtn = CreateFrame("Button", nil, configFrame, "UIPanelButtonTemplate")
 resetPosBtn:SetSize(100, 22)
 resetPosBtn:SetPoint("TOPLEFT", 20, -270)
@@ -381,10 +360,9 @@ configFrame:SetScript("OnShow", function()
     maxEntriesEditBox:SetText(tostring(settings.maxEntries))
     dynamicWidthCheckbox:SetChecked(settings.dynamicWidth)
     UIDropDownMenu_SetText(frameStrataDropdown, settings.frameStrata)
-    UpdateCoordinateDisplay()  -- This will set the current coordinates when opening the config
+    UpdateCoordinateDisplay()
 end)
 
--- Slash commands
 SLASH_LOOTPOP1 = "/lootpop"
 SlashCmdList["LOOTPOP"] = function(msg)
     if msg == "config" then
@@ -392,7 +370,6 @@ SlashCmdList["LOOTPOP"] = function(msg)
     end
 end
 
--- Helper functions
 local itemColors = {
     [0] = {0.62, 0.62, 0.62}, [1] = {1, 1, 1}, [2] = {0.12, 1, 0},
     [3] = {0, 0.44, 0.87}, [4] = {0.64, 0.21, 0.93}, [5] = {1, 0.5, 0}, [6] = {0.9, 0.8, 0.5}
@@ -483,7 +460,6 @@ local function CreateLootFrame(itemLink, texture, quantity)
         local existingData = lootData[lootKey]
         existingData.quantity = existingData.quantity + quantity
         
-        -- Clear existing timer
         if existingData.timerId then
             for i, timer in ipairs(activeTimers) do
                 if timer.id == existingData.timerId then
@@ -499,7 +475,7 @@ local function CreateLootFrame(itemLink, texture, quantity)
         
         if settings.dynamicWidth then
             local textWidth = GetTextWidth(displayText, existingData.textObj)
-            existingData.frame:SetWidth(textWidth + settings.iconSize + 17)
+            existingData.frame:SetWidth(textWidth + 33)
         end
         
         local timerId = math.random(1000000)
@@ -529,9 +505,6 @@ local function CreateLootFrame(itemLink, texture, quantity)
     lootFrame:SetScale(settings.scale)
     lootFrame:SetFrameStrata(settings.frameStrata)
     
-    local tempText = lootFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    tempText:SetJustifyH("LEFT")
-    
     local baseLink = itemLink:match("^(.-)x%d*$") or itemLink
     local displayText = quantity > 1 and (baseLink .. "|cFFFFFFFF x" .. quantity .. "|r") or baseLink
     
@@ -543,14 +516,22 @@ local function CreateLootFrame(itemLink, texture, quantity)
     end
     
     local forgeType = GetForgeType(itemLink)
-    local frameWidth = settings.frameWidth
     
+    local text = lootFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    text:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
+    text:SetJustifyH("LEFT")
+    text:SetJustifyV("MIDDLE")
+    text:SetText(displayText)
+    text:SetTextColor(unpack(textColor))
+    
+    local frameWidth = 250
     if settings.dynamicWidth then
-        local textWidth = GetTextWidth(displayText, tempText)
-        frameWidth = math.max(100, textWidth + settings.iconSize + 1)
+        text:SetWidth(1000)
+        local fullTextWidth = text:GetStringWidth()
+        frameWidth = math.max(100, fullTextWidth + 33)
     end
     
-    local frameHeight = math.max(settings.iconSize + 16, 32)
+    local frameHeight = 32
     lootFrame:SetSize(frameWidth, frameHeight)
     lootFrame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -559,11 +540,10 @@ local function CreateLootFrame(itemLink, texture, quantity)
         insets = { left = 4, right = 4, top = 4, bottom = 4 }
     })
     
-    -- Set forge-specific colors
     local forgeColors = {
-    titanforged = {{0.35, 0.35, 0.7, 1}, {0.42, 0.49, 0.63, 1}},
-    warforged = {{0.7, 0.36, 0.31, 1}, {0.7, 0.36, 0.31, 1}},
-    lightforged = {{0.67, 0.67, 0.49, 1}, {0.67, 0.67, 0.49, 1}}
+        titanforged = {{0.35, 0.35, 0.7, 1}, {0.42, 0.49, 0.63, 1}},
+        warforged = {{0.7, 0.36, 0.31, 1}, {0.7, 0.36, 0.31, 1}},
+        lightforged = {{0.67, 0.67, 0.49, 1}, {0.67, 0.67, 0.49, 1}}
     }
     
     if forgeType and forgeColors[forgeType] then
@@ -575,25 +555,11 @@ local function CreateLootFrame(itemLink, texture, quantity)
     end
     
     local icon = lootFrame:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(settings.iconSize, settings.iconSize)
+    icon:SetSize(16, 16)
     icon:SetPoint("LEFT", 7.5, 0)
     icon:SetTexture(texture)
     
-    local text = lootFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    text:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
     text:SetPoint("LEFT", icon, "RIGHT", 4, 1)
-    text:SetJustifyH("LEFT")
-    text:SetJustifyV("MIDDLE")
-    text:SetText(displayText)
-    text:SetTextColor(unpack(textColor))
-    
-    if settings.dynamicWidth then
-        text:SetWidth(1000)
-        local fullTextWidth = text:GetStringWidth()
-        lootFrame:SetWidth(fullTextWidth + settings.iconSize + 17)
-    end
-    
-    tempText:Hide()
     
     local frameData = { frame = lootFrame, key = lootKey }
     local timerId = math.random(1000000)
@@ -629,32 +595,63 @@ local function CreateLootFrame(itemLink, texture, quantity)
     end)
 end
 
--- Event registration
 f:RegisterEvent("CHAT_MSG_LOOT")
 f:SetScript("OnEvent", function(self, event, arg1)
     if event == "CHAT_MSG_LOOT" then
-        -- Filter out messages where items are not actually received
-        if arg1:find("You sell:") or arg1:find("You disenchant:") or arg1:find("You destroy:") then 
+        if arg1:find("You sell:") or arg1:find("You destroy:") or arg1:find("passed on:") or arg1:find("passes on:") or arg1:find("Roll -") then 
             return 
         end
         
-        local itemLink = arg1:match("|c%x+|Hitem.-|h%[.-%]|h|r")
-        if itemLink then
-            local quantity = tonumber(arg1:match("x(%d+)")) or 1
-            local itemID = itemLink:match("item:(%d+)")
-            if itemID then
-                local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(itemID)
-                if texture then CreateLootFrame(itemLink, texture, quantity) end
+        if arg1:find("selected Disenchant") then
+            local itemLink = arg1:match("|c%x+|Hitem.-|h%[.-%]|h|r")
+            if itemLink then
+                lastDisenchantItem = itemLink
+                CreateTimer(0.5, function()
+                    lastDisenchantItem = nil
+                end)
             end
-        else
-            local copper = arg1:match("(%d+) Copper")
-            local silver = arg1:match("(%d+) Silver")
-            local gold = arg1:match("(%d+) Gold")
-            if copper or silver or gold then
-                local totalCopper = (tonumber(gold) or 0) * 10000 + (tonumber(silver) or 0) * 100 + (tonumber(copper) or 0)
-                if totalCopper > 0 then
-                    CreateLootFrame("Money", "Interface\\Icons\\INV_Misc_Coin_01", totalCopper)
+            return
+        end
+        
+        if arg1:find("selected Greed") or arg1:find("selected Need") then
+            return
+        end
+        
+        if arg1:find("You won:") then
+            local itemLink = arg1:match("|c%x+|Hitem.-|h%[.-%]|h|r")
+            if itemLink then
+                if lastDisenchantItem and itemLink == lastDisenchantItem then
+                    return
                 end
+                local itemID = itemLink:match("item:(%d+)")
+                if itemID then
+                    local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(itemID)
+                    if texture then CreateLootFrame(itemLink, texture, 1) end
+                end
+            end
+            return
+        end
+        
+        if arg1:find("You receive loot:") or arg1:find("You create:") then
+            local itemLink = arg1:match("|c%x+|Hitem.-|h%[.-%]|h|r")
+            if itemLink then
+                local quantity = tonumber(arg1:match("x(%d+)")) or 1
+                local itemID = itemLink:match("item:(%d+)")
+                if itemID then
+                    local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(itemID)
+                    if texture then CreateLootFrame(itemLink, texture, quantity) end
+                end
+            end
+            return
+        end
+        
+        local copper = arg1:match("(%d+) Copper")
+        local silver = arg1:match("(%d+) Silver")
+        local gold = arg1:match("(%d+) Gold")
+        if copper or silver or gold then
+            local totalCopper = (tonumber(gold) or 0) * 10000 + (tonumber(silver) or 0) * 100 + (tonumber(copper) or 0)
+            if totalCopper > 0 then
+                CreateLootFrame("Money", "Interface\\Icons\\INV_Misc_Coin_01", totalCopper)
             end
         end
     end
