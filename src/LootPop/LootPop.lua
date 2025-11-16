@@ -4,23 +4,23 @@ local lootData = {}
 local lastDisenchantItem = nil
 local settings = {
     spacing = 0,
-    scale = 0.8,
+    scale = 1.0,
     maxEntries = 10,
-    dynamicWidth = true,
     frameStrata = "DIALOG",
+    growUp = true,
 }
 
 LootPopDB = LootPopDB or {
     anchorX = 842,
     anchorY = -300,
-    scale = 0.8,
+    scale = 1.0,
     spacing = 0,
     maxEntries = 10,
-    dynamicWidth = true,
     frameStrata = "DIALOG",
+    growUp = true,
 }
 
-local anchor, configFrame, xCoordEditBox, yCoordEditBox
+local anchor, anchor2, configFrame
 local timerFrame = CreateFrame("Frame")
 local activeTimers = {}
 
@@ -39,21 +39,17 @@ timerFrame:SetScript("OnUpdate", function(self, elapsed)
     end
 end)
 
-local function RoundCoordinate(value)
-    return math.floor(value * 100 + 0.5) / 100
-end
-
 local function SaveAllSettings()
     local left, top = anchor:GetLeft(), anchor:GetTop()
     if left and top then
-        LootPopDB.anchorX = RoundCoordinate(left)
-        LootPopDB.anchorY = RoundCoordinate(top - UIParent:GetHeight())
+        LootPopDB.anchorX = math.floor(left * 100 + 0.5) / 100
+        LootPopDB.anchorY = math.floor((top - UIParent:GetHeight()) * 100 + 0.5) / 100
     end
     LootPopDB.scale = settings.scale
     LootPopDB.spacing = settings.spacing
     LootPopDB.maxEntries = settings.maxEntries
-    LootPopDB.dynamicWidth = settings.dynamicWidth
     LootPopDB.frameStrata = settings.frameStrata
+    LootPopDB.growUp = settings.growUp
 end
 
 local function LoadAllSettings()
@@ -61,36 +57,27 @@ local function LoadAllSettings()
     local x = type(LootPopDB.anchorX) == "number" and LootPopDB.anchorX or 842
     local y = type(LootPopDB.anchorY) == "number" and LootPopDB.anchorY or -300
     anchor:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
+    anchor:SetScale(LootPopDB.scale or 1.0)
     
-    settings.scale = type(LootPopDB.scale) == "number" and LootPopDB.scale or 0.8
+    settings.scale = type(LootPopDB.scale) == "number" and LootPopDB.scale or 1.0
     settings.spacing = type(LootPopDB.spacing) == "number" and LootPopDB.spacing or 0
     settings.maxEntries = type(LootPopDB.maxEntries) == "number" and LootPopDB.maxEntries or 10
-    settings.dynamicWidth = LootPopDB.dynamicWidth ~= false
     settings.frameStrata = type(LootPopDB.frameStrata) == "string" and LootPopDB.frameStrata or "DIALOG"
-end
-
-local function UpdateCoordinateDisplay()
-    if configFrame and configFrame:IsShown() and xCoordEditBox and yCoordEditBox then
-        local left, top = anchor:GetLeft(), anchor:GetTop()
-        if left and top then
-            local currentX = RoundCoordinate(left)
-            local currentY = RoundCoordinate(top - UIParent:GetHeight())
-            
-            if not xCoordEditBox:HasFocus() then
-                xCoordEditBox:SetText(string.format("%.2f", currentX))
-            end
-            if not yCoordEditBox:HasFocus() then
-                yCoordEditBox:SetText(string.format("%.2f", currentY))
-            end
+    settings.growUp = LootPopDB.growUp ~= false
+    
+    if anchor2 then
+        anchor2:ClearAllPoints()
+        if settings.growUp then
+            anchor2:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 32 + settings.spacing)
+        else
+            anchor2:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -(32 + settings.spacing))
         end
     end
 end
 
-local coordUpdateFrame = CreateFrame("Frame")
-coordUpdateFrame:SetScript("OnUpdate", UpdateCoordinateDisplay)
-
 anchor = CreateFrame("Frame", nil, UIParent)
-anchor:SetSize(200, 30)
+anchor:SetSize(250, 32)
+anchor:SetScale(settings.scale)
 anchor:SetPoint("TOPLEFT", UIParent, "TOPLEFT", LootPopDB.anchorX or 842, LootPopDB.anchorY or -300)
 anchor:SetMovable(true)
 anchor:EnableMouse(false)
@@ -101,20 +88,51 @@ anchor:SetScript("OnDragStop", function(self)
     SaveAllSettings()
 end)
 
-local anchorBg = anchor:CreateTexture(nil, "BACKGROUND")
-anchorBg:SetAllPoints()
-anchorBg:SetTexture(1, 1, 1, 0.8)
-anchorBg:SetVertexColor(0, 1, 0)
+anchor:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 }
+})
+anchor:SetBackdropColor(0, 0, 0, 1)
+anchor:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
 
-local anchorText = anchor:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-anchorText:SetPoint("CENTER")
-anchorText:SetText("LOOT ANCHOR")
+local anchorIcon = anchor:CreateTexture(nil, "ARTWORK")
+anchorIcon:SetSize(16, 16)
+anchorIcon:SetPoint("LEFT", 7.5, 0)
+anchorIcon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
 
-local cornerIndicator = anchor:CreateTexture(nil, "OVERLAY")
-cornerIndicator:SetSize(8, 8)
-cornerIndicator:SetPoint("BOTTOMLEFT", 2, 2)
-cornerIndicator:SetTexture(1, 1, 1, 1)
-cornerIndicator:SetVertexColor(1, 0, 0)
+local anchorText = anchor:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+anchorText:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
+anchorText:SetJustifyH("LEFT")
+anchorText:SetPoint("LEFT", anchorIcon, "RIGHT", 4, 1)
+anchorText:SetText("Loot Anchor - Drag to Move")
+anchorText:SetTextColor(1, 1, 1)
+
+anchor2 = CreateFrame("Frame", nil, anchor)
+anchor2:SetSize(250, 32)
+anchor2:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 32 + settings.spacing)
+anchor2:SetBackdrop({
+    bgFile = "Interface\\Buttons\\WHITE8X8",
+    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+    tile = true, tileSize = 16, edgeSize = 16,
+    insets = { left = 4, right = 4, top = 4, bottom = 4 }
+})
+anchor2:SetBackdropColor(0, 0, 0, 1)
+anchor2:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
+
+local anchor2Icon = anchor2:CreateTexture(nil, "ARTWORK")
+anchor2Icon:SetSize(16, 16)
+anchor2Icon:SetPoint("LEFT", 7.5, 0)
+anchor2Icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+
+local anchor2Text = anchor2:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+anchor2Text:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
+anchor2Text:SetJustifyH("LEFT")
+anchor2Text:SetPoint("LEFT", anchor2Icon, "RIGHT", 4, 1)
+anchor2Text:SetText("Second Loot Item")
+anchor2Text:SetTextColor(1, 1, 1)
+
 anchor:Hide()
 
 local addonFrame = CreateFrame("Frame")
@@ -129,7 +147,7 @@ addonFrame:SetScript("OnEvent", function(self, event, addonName)
 end)
 
 configFrame = CreateFrame("Frame", "LootPopConfig", UIParent)
-configFrame:SetSize(350, 360)
+configFrame:SetSize(300, 340)
 configFrame:SetPoint("CENTER")
 configFrame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -157,7 +175,7 @@ title:SetText("LootPop Configuration")
 local function CreateSlider(parent, name, width, x, y, minVal, maxVal, currentVal, step, labelText)
     local slider = CreateFrame("Slider", name, parent, "OptionsSliderTemplate")
     slider:SetSize(width, 17)
-    slider:SetPoint("TOPLEFT", x, y)
+    slider:SetPoint("TOP", x, y)
     slider:SetMinMaxValues(minVal, maxVal)
     slider:SetValue(currentVal)
     slider:SetValueStep(step)
@@ -169,27 +187,38 @@ local function CreateSlider(parent, name, width, x, y, minVal, maxVal, currentVa
     return slider
 end
 
-local scaleSlider = CreateSlider(configFrame, "LootPopScaleSlider", 200, 20, -50, 0.5, 2.0, settings.scale, 0.1, "Scale")
+local scaleSlider = CreateSlider(configFrame, "LootPopScaleSlider", 200, 0, -50, 0.5, 2.0, settings.scale, 0.1, "Scale")
 scaleSlider:SetScript("OnValueChanged", function(self, value)
     settings.scale = value
     getglobal(self:GetName().."Text"):SetText("Scale: " .. string.format("%.1f", value))
+    if anchor:IsShown() then
+        anchor:SetScale(value)
+    end
     SaveAllSettings()
 end)
 
-local spacingSlider = CreateSlider(configFrame, "LootPopSpacingSlider", 200, 20, -100, 0, 20, settings.spacing, 1, "Spacing")
+local spacingSlider = CreateSlider(configFrame, "LootPopSpacingSlider", 200, 0, -80, 0, 20, settings.spacing, 1, "Spacing")
 spacingSlider:SetScript("OnValueChanged", function(self, value)
     settings.spacing = value
     getglobal(self:GetName().."Text"):SetText("Spacing: " .. value)
+    if anchor:IsShown() and anchor2 then
+        anchor2:ClearAllPoints()
+        if settings.growUp then
+            anchor2:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 32 + value)
+        else
+            anchor2:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -(32 + value))
+        end
+    end
     SaveAllSettings()
 end)
 
 local maxEntriesLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-maxEntriesLabel:SetPoint("TOPLEFT", 20, -140)
+maxEntriesLabel:SetPoint("TOP", 0, -105)
 maxEntriesLabel:SetText("Max Entries:")
 
 local maxEntriesEditBox = CreateFrame("EditBox", nil, configFrame, "InputBoxTemplate")
 maxEntriesEditBox:SetSize(60, 20)
-maxEntriesEditBox:SetPoint("LEFT", maxEntriesLabel, "RIGHT", 10, 0)
+maxEntriesEditBox:SetPoint("TOP", 0, -125)
 maxEntriesEditBox:SetText(tostring(settings.maxEntries))
 maxEntriesEditBox:SetAutoFocus(false)
 maxEntriesEditBox:SetScript("OnEnterPressed", function(self)
@@ -204,23 +233,12 @@ maxEntriesEditBox:SetScript("OnEnterPressed", function(self)
     self:ClearFocus()
 end)
 
-local dynamicWidthCheckbox = CreateFrame("CheckButton", nil, configFrame, "UICheckButtonTemplate")
-dynamicWidthCheckbox:SetPoint("TOPLEFT", 20, -170)
-dynamicWidthCheckbox:SetChecked(settings.dynamicWidth)
-dynamicWidthCheckbox.text = dynamicWidthCheckbox:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-dynamicWidthCheckbox.text:SetPoint("LEFT", dynamicWidthCheckbox, "RIGHT", 0, 0)
-dynamicWidthCheckbox.text:SetText("Dynamic Width")
-dynamicWidthCheckbox:SetScript("OnClick", function(self)
-    settings.dynamicWidth = self:GetChecked()
-    SaveAllSettings()
-end)
-
 local frameStrataLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-frameStrataLabel:SetPoint("TOPLEFT", 20, -200)
+frameStrataLabel:SetPoint("TOP", 0, -150)
 frameStrataLabel:SetText("Frame Strata:")
 
 local frameStrataDropdown = CreateFrame("Frame", "LootPopFrameStrataDropdown", configFrame, "UIDropDownMenuTemplate")
-frameStrataDropdown:SetPoint("LEFT", frameStrataLabel, "RIGHT", 10, -2)
+frameStrataDropdown:SetPoint("TOP", 0, -165)
 local strataOptions = {"BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP"}
 
 UIDropDownMenu_Initialize(frameStrataDropdown, function()
@@ -231,6 +249,9 @@ UIDropDownMenu_Initialize(frameStrataDropdown, function()
         info.func = function()
             settings.frameStrata = strata
             UIDropDownMenu_SetText(frameStrataDropdown, strata)
+            if anchor:IsShown() then
+                anchor:SetFrameStrata(strata)
+            end
             SaveAllSettings()
         end
         info.checked = (settings.frameStrata == strata)
@@ -240,65 +261,75 @@ end)
 UIDropDownMenu_SetWidth(frameStrataDropdown, 120)
 UIDropDownMenu_SetText(frameStrataDropdown, settings.frameStrata)
 
-local xCoordLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-xCoordLabel:SetPoint("TOPLEFT", 20, -240)
-xCoordLabel:SetText("Anchor X:")
+local growthLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+growthLabel:SetPoint("TOP", 0, -195)
+growthLabel:SetText("Growth Direction:")
 
-xCoordEditBox = CreateFrame("EditBox", nil, configFrame, "InputBoxTemplate")
-xCoordEditBox:SetSize(80, 20)
-xCoordEditBox:SetPoint("LEFT", xCoordLabel, "RIGHT", 10, 0)
-xCoordEditBox:SetAutoFocus(false)
-xCoordEditBox:SetScript("OnEnterPressed", function(self)
-    local value = tonumber(self:GetText())
-    if value then
-        LootPopDB.anchorX = value
-        LoadAllSettings()
-    else
-        self:SetText(string.format("%.2f", LootPopDB.anchorX or 842))
+local growthDropdown = CreateFrame("Frame", "LootPopGrowthDropdown", configFrame, "UIDropDownMenuTemplate")
+growthDropdown:SetPoint("TOP", 0, -210)
+
+UIDropDownMenu_Initialize(growthDropdown, function()
+    local info = {}
+    
+    info.text = "Grow Up"
+    info.value = true
+    info.func = function()
+        settings.growUp = true
+        UIDropDownMenu_SetText(growthDropdown, "Grow Up")
+        if anchor2 then
+            anchor2:ClearAllPoints()
+            if settings.growUp then
+                anchor2:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 32 + settings.spacing)
+            else
+                anchor2:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -(32 + settings.spacing))
+            end
+        end
+        SaveAllSettings()
     end
-    self:ClearFocus()
-end)
-
-local yCoordLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-yCoordLabel:SetPoint("LEFT", xCoordEditBox, "RIGHT", 20, 0)
-yCoordLabel:SetText("Anchor Y:")
-
-yCoordEditBox = CreateFrame("EditBox", nil, configFrame, "InputBoxTemplate")
-yCoordEditBox:SetSize(80, 20)
-yCoordEditBox:SetPoint("LEFT", yCoordLabel, "RIGHT", 10, 0)
-yCoordEditBox:SetAutoFocus(false)
-yCoordEditBox:SetScript("OnEnterPressed", function(self)
-    local value = tonumber(self:GetText())
-    if value then
-        LootPopDB.anchorY = value
-        LoadAllSettings()
-    else
-        self:SetText(string.format("%.2f", LootPopDB.anchorY or -300))
+    info.checked = settings.growUp
+    UIDropDownMenu_AddButton(info)
+    
+    info.text = "Grow Down"
+    info.value = false
+    info.func = function()
+        settings.growUp = false
+        UIDropDownMenu_SetText(growthDropdown, "Grow Down")
+        if anchor2 then
+            anchor2:ClearAllPoints()
+            if settings.growUp then
+                anchor2:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 32 + settings.spacing)
+            else
+                anchor2:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -(32 + settings.spacing))
+            end
+        end
+        SaveAllSettings()
     end
-    self:ClearFocus()
+    info.checked = not settings.growUp
+    UIDropDownMenu_AddButton(info)
 end)
+UIDropDownMenu_SetWidth(growthDropdown, 120)
+UIDropDownMenu_SetText(growthDropdown, settings.growUp and "Grow Up" or "Grow Down")
 
-local resetPosBtn = CreateFrame("Button", nil, configFrame, "UIPanelButtonTemplate")
-resetPosBtn:SetSize(100, 22)
-resetPosBtn:SetPoint("TOPLEFT", 20, -270)
-resetPosBtn:SetText("Reset Position")
-resetPosBtn:SetScript("OnClick", function()
-    LootPopDB.anchorX = 842
-    LootPopDB.anchorY = -300
-    LoadAllSettings()
-    xCoordEditBox:SetText("842.00")
-    yCoordEditBox:SetText("-300.00")
+local centerBtn = CreateFrame("Button", nil, configFrame, "UIPanelButtonTemplate")
+centerBtn:SetSize(160, 22)
+centerBtn:SetPoint("BOTTOM", 0, 68)
+centerBtn:SetText("Return to Center")
+centerBtn:SetScript("OnClick", function()
+    anchor:ClearAllPoints()
+    anchor:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    SaveAllSettings()
 end)
 
 local posBtn = CreateFrame("Button", nil, configFrame, "UIPanelButtonTemplate")
-posBtn:SetSize(120, 22)
-posBtn:SetPoint("TOPLEFT", 130, -270)
+posBtn:SetSize(160, 22)
+posBtn:SetPoint("BOTTOM", 0, 43)
 posBtn:SetText("Show/Move Anchor")
 posBtn:SetScript("OnClick", function()
     if anchor:IsShown() then
         anchor:Hide()
         anchor:EnableMouse(false)
     else
+        anchor:SetScale(settings.scale)
         anchor:Show()
         anchor:EnableMouse(true)
     end
@@ -306,7 +337,7 @@ end)
 
 local closeBtn = CreateFrame("Button", nil, configFrame, "UIPanelButtonTemplate")
 closeBtn:SetSize(80, 22)
-closeBtn:SetPoint("TOPRIGHT", -20, -270)
+closeBtn:SetPoint("BOTTOM", 0, 18)
 closeBtn:SetText("Close")
 closeBtn:SetScript("OnClick", function()
     configFrame:Hide()
@@ -316,9 +347,8 @@ configFrame:SetScript("OnShow", function()
     scaleSlider:SetValue(settings.scale)
     spacingSlider:SetValue(settings.spacing)
     maxEntriesEditBox:SetText(tostring(settings.maxEntries))
-    dynamicWidthCheckbox:SetChecked(settings.dynamicWidth)
     UIDropDownMenu_SetText(frameStrataDropdown, settings.frameStrata)
-    UpdateCoordinateDisplay()
+    UIDropDownMenu_SetText(growthDropdown, settings.growUp and "Grow Up" or "Grow Down")
 end)
 
 SLASH_LOOTPOP1 = "/lootpop"
@@ -365,9 +395,15 @@ end
 local function RepositionFrames()
     for i, frameData in ipairs(lootFrames) do
         local frame = frameData.frame
-        local targetY = (i - 1) * (frame:GetHeight() + settings.spacing)
-        frame:ClearAllPoints()
-        frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, targetY)
+        if settings.growUp then
+            local targetY = (i - 1) * (frame:GetHeight() + settings.spacing)
+            frame:ClearAllPoints()
+            frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, targetY)
+        else
+            local targetY = -(i - 1) * (frame:GetHeight() + settings.spacing)
+            frame:ClearAllPoints()
+            frame:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, targetY)
+        end
     end
 end
 
@@ -426,10 +462,8 @@ local function CreateLootFrame(itemLink, texture, quantity)
         local displayText = existingData.quantity > 1 and (baseLink .. "|cFFFFFFFF x" .. existingData.quantity .. "|r") or baseLink
         existingData.textObj:SetText(displayText)
         
-        if settings.dynamicWidth then
-            existingData.textObj:SetWidth(1000)
-            existingData.frame:SetWidth(existingData.textObj:GetStringWidth() + 33)
-        end
+        existingData.textObj:SetWidth(0)
+        existingData.frame:SetWidth(math.max(50, existingData.textObj:GetStringWidth() + 33))
         
         local timerId = math.random(1000000)
         existingData.timerId = timerId
@@ -478,11 +512,8 @@ local function CreateLootFrame(itemLink, texture, quantity)
     text:SetText(displayText)
     text:SetTextColor(textColor[1], textColor[2], textColor[3])
     
-    local frameWidth = 250
-    if settings.dynamicWidth then
-        text:SetWidth(1000)
-        frameWidth = math.max(100, text:GetStringWidth() + 33)
-    end
+    text:SetWidth(0)
+    local frameWidth = math.max(50, text:GetStringWidth() + 33)
     
     lootFrame:SetSize(frameWidth, 32)
     lootFrame:SetBackdrop({
