@@ -8,6 +8,7 @@ local settings = {
     maxEntries = 10,
     frameStrata = "DIALOG",
     growUp = true,
+    duration = 5,
 }
 
 LootPopDB = LootPopDB or {
@@ -18,9 +19,11 @@ LootPopDB = LootPopDB or {
     maxEntries = 10,
     frameStrata = "DIALOG",
     growUp = true,
+    duration = 5,
 }
 
-local anchor, anchor2, configFrame
+local anchor, configFrame
+local previewFrames = {}
 local timerFrame = CreateFrame("Frame")
 local activeTimers = {}
 
@@ -50,6 +53,7 @@ local function SaveAllSettings()
     LootPopDB.maxEntries = settings.maxEntries
     LootPopDB.frameStrata = settings.frameStrata
     LootPopDB.growUp = settings.growUp
+    LootPopDB.duration = settings.duration
 end
 
 local function LoadAllSettings()
@@ -64,15 +68,7 @@ local function LoadAllSettings()
     settings.maxEntries = type(LootPopDB.maxEntries) == "number" and LootPopDB.maxEntries or 10
     settings.frameStrata = type(LootPopDB.frameStrata) == "string" and LootPopDB.frameStrata or "DIALOG"
     settings.growUp = LootPopDB.growUp ~= false
-    
-    if anchor2 then
-        anchor2:ClearAllPoints()
-        if settings.growUp then
-            anchor2:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 32 + settings.spacing)
-        else
-            anchor2:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -(32 + settings.spacing))
-        end
-    end
+    settings.duration = type(LootPopDB.duration) == "number" and LootPopDB.duration or 5
 end
 
 anchor = CreateFrame("Frame", nil, UIParent)
@@ -109,29 +105,67 @@ anchorText:SetPoint("LEFT", anchorIcon, "RIGHT", 4, 1)
 anchorText:SetText("Loot Anchor - Drag to Move")
 anchorText:SetTextColor(1, 1, 1)
 
-anchor2 = CreateFrame("Frame", nil, anchor)
-anchor2:SetSize(250, 32)
-anchor2:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 32 + settings.spacing)
-anchor2:SetBackdrop({
-    bgFile = "Interface\\Buttons\\WHITE8X8",
-    edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-    tile = true, tileSize = 16, edgeSize = 16,
-    insets = { left = 4, right = 4, top = 4, bottom = 4 }
-})
-anchor2:SetBackdropColor(0, 0, 0, 1)
-anchor2:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
+anchor:Hide()
 
-local anchor2Icon = anchor2:CreateTexture(nil, "ARTWORK")
-anchor2Icon:SetSize(16, 16)
-anchor2Icon:SetPoint("LEFT", 7.5, 0)
-anchor2Icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+local function CreatePreviewFrame(index)
+    local previewFrame = CreateFrame("Frame", nil, anchor)
+    previewFrame:SetSize(250, 32)
+    previewFrame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true, tileSize = 16, edgeSize = 16,
+        insets = { left = 4, right = 4, top = 4, bottom = 4 }
+    })
+    previewFrame:SetBackdropColor(0, 0, 0, 1)
+    previewFrame:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
 
-local anchor2Text = anchor2:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-anchor2Text:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
-anchor2Text:SetJustifyH("LEFT")
-anchor2Text:SetPoint("LEFT", anchor2Icon, "RIGHT", 4, 1)
-anchor2Text:SetText("Second Loot Item")
-anchor2Text:SetTextColor(1, 1, 1)
+    local icon = previewFrame:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(16, 16)
+    icon:SetPoint("LEFT", 7.5, 0)
+    icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+
+    local text = previewFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    text:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
+    text:SetJustifyH("LEFT")
+    text:SetPoint("LEFT", icon, "RIGHT", 4, 1)
+    text:SetText("Loot Item")
+    text:SetTextColor(1, 1, 1)
+    
+    return previewFrame
+end
+
+local function UpdatePreviewFrames()
+    -- Hide all existing preview frames
+    for i, frame in ipairs(previewFrames) do
+        frame:Hide()
+    end
+    
+    -- Calculate how many preview frames we need (maxEntries - 1)
+    local neededFrames = settings.maxEntries - 1
+    
+    -- Create additional frames if needed
+    while #previewFrames < neededFrames do
+        table.insert(previewFrames, CreatePreviewFrame(#previewFrames + 1))
+    end
+    
+    -- Position and show the required number of preview frames
+    for i = 1, neededFrames do
+        local frame = previewFrames[i]
+        frame:ClearAllPoints()
+        
+        if settings.growUp then
+            local targetY = i * (32 + settings.spacing)
+            frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, targetY)
+        else
+            local targetY = -i * (32 + settings.spacing)
+            frame:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, targetY)
+        end
+        
+        if anchor:IsShown() then
+            frame:Show()
+        end
+    end
+end
 
 anchor:Hide()
 
@@ -147,7 +181,7 @@ addonFrame:SetScript("OnEvent", function(self, event, addonName)
 end)
 
 configFrame = CreateFrame("Frame", "LootPopConfig", UIParent)
-configFrame:SetSize(300, 340)
+configFrame:SetSize(300, 375)
 configFrame:SetPoint("CENTER")
 configFrame:SetBackdrop({
     bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -166,6 +200,10 @@ configFrame:SetScript("OnHide", function()
     SaveAllSettings()
     anchor:Hide()
     anchor:EnableMouse(false)
+    -- Hide all preview frames
+    for i, frame in ipairs(previewFrames) do
+        frame:Hide()
+    end
 end)
 
 local title = configFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -201,24 +239,26 @@ local spacingSlider = CreateSlider(configFrame, "LootPopSpacingSlider", 200, 0, 
 spacingSlider:SetScript("OnValueChanged", function(self, value)
     settings.spacing = value
     getglobal(self:GetName().."Text"):SetText("Spacing: " .. value)
-    if anchor:IsShown() and anchor2 then
-        anchor2:ClearAllPoints()
-        if settings.growUp then
-            anchor2:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 32 + value)
-        else
-            anchor2:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -(32 + value))
-        end
+    if anchor:IsShown() then
+        UpdatePreviewFrames()
     end
     SaveAllSettings()
 end)
 
+local durationSlider = CreateSlider(configFrame, "LootPopDurationSlider", 200, 0, -110, 1, 10, settings.duration, 1, "Duration")
+durationSlider:SetScript("OnValueChanged", function(self, value)
+    settings.duration = value
+    getglobal(self:GetName().."Text"):SetText("Duration: " .. value .. "s")
+    SaveAllSettings()
+end)
+
 local maxEntriesLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-maxEntriesLabel:SetPoint("TOP", 0, -105)
+maxEntriesLabel:SetPoint("TOP", 0, -140)
 maxEntriesLabel:SetText("Max Entries:")
 
 local maxEntriesEditBox = CreateFrame("EditBox", nil, configFrame, "InputBoxTemplate")
 maxEntriesEditBox:SetSize(60, 20)
-maxEntriesEditBox:SetPoint("TOP", 0, -125)
+maxEntriesEditBox:SetPoint("TOP", 0, -160)
 maxEntriesEditBox:SetText(tostring(settings.maxEntries))
 maxEntriesEditBox:SetAutoFocus(false)
 maxEntriesEditBox:SetScript("OnEnterPressed", function(self)
@@ -226,6 +266,9 @@ maxEntriesEditBox:SetScript("OnEnterPressed", function(self)
     if value and value > 0 and value <= 50 then
         settings.maxEntries = math.floor(value)
         self:SetText(tostring(settings.maxEntries))
+        if anchor:IsShown() then
+            UpdatePreviewFrames()
+        end
         SaveAllSettings()
     else
         self:SetText(tostring(settings.maxEntries))
@@ -234,11 +277,11 @@ maxEntriesEditBox:SetScript("OnEnterPressed", function(self)
 end)
 
 local frameStrataLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-frameStrataLabel:SetPoint("TOP", 0, -150)
+frameStrataLabel:SetPoint("TOP", 0, -185)
 frameStrataLabel:SetText("Frame Strata:")
 
 local frameStrataDropdown = CreateFrame("Frame", "LootPopFrameStrataDropdown", configFrame, "UIDropDownMenuTemplate")
-frameStrataDropdown:SetPoint("TOP", 0, -165)
+frameStrataDropdown:SetPoint("TOP", 0, -200)
 local strataOptions = {"BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG", "FULLSCREEN", "FULLSCREEN_DIALOG", "TOOLTIP"}
 
 UIDropDownMenu_Initialize(frameStrataDropdown, function()
@@ -262,11 +305,11 @@ UIDropDownMenu_SetWidth(frameStrataDropdown, 120)
 UIDropDownMenu_SetText(frameStrataDropdown, settings.frameStrata)
 
 local growthLabel = configFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-growthLabel:SetPoint("TOP", 0, -195)
+growthLabel:SetPoint("TOP", 0, -230)
 growthLabel:SetText("Growth Direction:")
 
 local growthDropdown = CreateFrame("Frame", "LootPopGrowthDropdown", configFrame, "UIDropDownMenuTemplate")
-growthDropdown:SetPoint("TOP", 0, -210)
+growthDropdown:SetPoint("TOP", 0, -245)
 
 UIDropDownMenu_Initialize(growthDropdown, function()
     local info = {}
@@ -276,13 +319,8 @@ UIDropDownMenu_Initialize(growthDropdown, function()
     info.func = function()
         settings.growUp = true
         UIDropDownMenu_SetText(growthDropdown, "Grow Up")
-        if anchor2 then
-            anchor2:ClearAllPoints()
-            if settings.growUp then
-                anchor2:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 32 + settings.spacing)
-            else
-                anchor2:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -(32 + settings.spacing))
-            end
+        if anchor:IsShown() then
+            UpdatePreviewFrames()
         end
         SaveAllSettings()
     end
@@ -294,13 +332,8 @@ UIDropDownMenu_Initialize(growthDropdown, function()
     info.func = function()
         settings.growUp = false
         UIDropDownMenu_SetText(growthDropdown, "Grow Down")
-        if anchor2 then
-            anchor2:ClearAllPoints()
-            if settings.growUp then
-                anchor2:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 32 + settings.spacing)
-            else
-                anchor2:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, -(32 + settings.spacing))
-            end
+        if anchor:IsShown() then
+            UpdatePreviewFrames()
         end
         SaveAllSettings()
     end
@@ -328,10 +361,14 @@ posBtn:SetScript("OnClick", function()
     if anchor:IsShown() then
         anchor:Hide()
         anchor:EnableMouse(false)
+        for i, frame in ipairs(previewFrames) do
+            frame:Hide()
+        end
     else
         anchor:SetScale(settings.scale)
         anchor:Show()
         anchor:EnableMouse(true)
+        UpdatePreviewFrames()
     end
 end)
 
@@ -346,6 +383,7 @@ end)
 configFrame:SetScript("OnShow", function()
     scaleSlider:SetValue(settings.scale)
     spacingSlider:SetValue(settings.spacing)
+    durationSlider:SetValue(settings.duration)
     maxEntriesEditBox:SetText(tostring(settings.maxEntries))
     UIDropDownMenu_SetText(frameStrataDropdown, settings.frameStrata)
     UIDropDownMenu_SetText(growthDropdown, settings.growUp and "Grow Up" or "Grow Down")
@@ -392,17 +430,20 @@ local function GetLootKey(itemLink)
     return itemLink:match("^(.-)x%d+$") or itemLink
 end
 
-local function RepositionFrames()
+local function RepositionFrames(skipFadingFrames)
     for i, frameData in ipairs(lootFrames) do
         local frame = frameData.frame
-        if settings.growUp then
-            local targetY = (i - 1) * (frame:GetHeight() + settings.spacing)
-            frame:ClearAllPoints()
-            frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, targetY)
-        else
-            local targetY = -(i - 1) * (frame:GetHeight() + settings.spacing)
-            frame:ClearAllPoints()
-            frame:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, targetY)
+        -- Skip frames that are currently fading out or being destroyed
+        if not frame.isFading and not frame.isDestroying then
+            if settings.growUp then
+                local targetY = (i - 1) * (frame:GetHeight() + settings.spacing)
+                frame:ClearAllPoints()
+                frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, targetY)
+            else
+                local targetY = -(i - 1) * (frame:GetHeight() + settings.spacing)
+                frame:ClearAllPoints()
+                frame:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, targetY)
+            end
         end
     end
 end
@@ -410,6 +451,7 @@ end
 local function CreateFadeAnimation(frame, fadeIn, callback)
     local fadeTimer = 0
     local fadeFrame = CreateFrame("Frame")
+    
     fadeFrame:SetScript("OnUpdate", function(self, elapsed)
         fadeTimer = fadeTimer + elapsed
         local alpha = fadeIn and (fadeTimer / 0.3) or (1 - fadeTimer / 0.3)
@@ -424,20 +466,30 @@ local function CreateFadeAnimation(frame, fadeIn, callback)
 end
 
 local function RemoveOldestFrame()
-    if #lootFrames > settings.maxEntries then
-        local oldestFrame = lootFrames[1]
-        CreateFadeAnimation(oldestFrame.frame, false, function()
-            oldestFrame.frame:Hide()
-            oldestFrame.frame:SetParent(nil)
-            table.remove(lootFrames, 1)
-            for key, data in pairs(lootData) do
-                if data.frame == oldestFrame.frame then
-                    lootData[key] = nil
-                    break
+    if #lootFrames >= settings.maxEntries then
+        local oldestFrame = lootFrames[#lootFrames]
+        
+        for key, data in pairs(lootData) do
+            if data.frame == oldestFrame.frame then
+                if data.timerId then
+                    for i = #activeTimers, 1, -1 do
+                        local timer = activeTimers[i]
+                        if timer.id == data.timerId then
+                            table.remove(activeTimers, i)
+                            break
+                        end
+                    end
                 end
+                lootData[key] = nil
+                break
             end
-            RepositionFrames()
-        end)
+        end
+        
+        oldestFrame.frame:Hide()
+        oldestFrame.frame:SetParent(nil)
+        table.remove(lootFrames, #lootFrames)
+        
+        RepositionFrames()
     end
 end
 
@@ -467,18 +519,18 @@ local function CreateLootFrame(itemLink, texture, quantity)
         
         local timerId = math.random(1000000)
         existingData.timerId = timerId
-        CreateTimer(5, function()
+        CreateTimer(settings.duration, function()
             if existingData.timerId == timerId then
                 lootData[lootKey] = nil
-                for i, data in ipairs(lootFrames) do
-                    if data.frame == existingData.frame then
-                        table.remove(lootFrames, i)
-                        break
-                    end
-                end
                 CreateFadeAnimation(existingData.frame, false, function()
                     existingData.frame:Hide()
                     existingData.frame:SetParent(nil)
+                    for i, data in ipairs(lootFrames) do
+                        if data.frame == existingData.frame then
+                            table.remove(lootFrames, i)
+                            break
+                        end
+                    end
                     RepositionFrames()
                 end)
             end
@@ -486,6 +538,7 @@ local function CreateLootFrame(itemLink, texture, quantity)
         return
     end
     
+    -- Check and remove oldest frame BEFORE creating new one
     RemoveOldestFrame()
     
     local lootFrame = CreateFrame("Frame", nil, UIParent)
@@ -512,7 +565,16 @@ local function CreateLootFrame(itemLink, texture, quantity)
     text:SetText(displayText)
     text:SetTextColor(textColor[1], textColor[2], textColor[3])
     
+    -- Create icon first so text can be positioned relative to it
+    local icon = lootFrame:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(16, 16)
+    icon:SetPoint("LEFT", 7.5, 0)
+    icon:SetTexture(texture)
+    
+    text:SetPoint("LEFT", icon, "RIGHT", 4, 1)
     text:SetWidth(0)
+    
+    -- Now measure the text width after it's positioned
     local frameWidth = math.max(50, text:GetStringWidth() + 33)
     
     lootFrame:SetSize(frameWidth, 32)
@@ -537,12 +599,19 @@ local function CreateLootFrame(itemLink, texture, quantity)
         lootFrame:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
     end
     
-    local icon = lootFrame:CreateTexture(nil, "ARTWORK")
-    icon:SetSize(16, 16)
-    icon:SetPoint("LEFT", 7.5, 0)
-    icon:SetTexture(texture)
+    local forgeColors = {
+        titanforged = {{0.35, 0.35, 0.7, 1}, {0.42, 0.49, 0.63, 1}},
+        warforged = {{0.7, 0.36, 0.31, 1}, {0.7, 0.36, 0.31, 1}},
+        lightforged = {{0.67, 0.67, 0.49, 1}, {0.67, 0.67, 0.49, 1}}
+    }
     
-    text:SetPoint("LEFT", icon, "RIGHT", 4, 1)
+    if forgeType and forgeColors[forgeType] then
+        lootFrame:SetBackdropColor(unpack(forgeColors[forgeType][1]))
+        lootFrame:SetBackdropBorderColor(unpack(forgeColors[forgeType][2]))
+    else
+        lootFrame:SetBackdropColor(0, 0, 0, 1)
+        lootFrame:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
+    end
     
     local frameData = { frame = lootFrame, key = lootKey }
     local timerId = math.random(1000000)
@@ -559,18 +628,18 @@ local function CreateLootFrame(itemLink, texture, quantity)
     CreateFadeAnimation(lootFrame, true)
     lootFrame:Show()
     
-    CreateTimer(5, function()
+    CreateTimer(settings.duration, function()
         if lootData[lootKey] and lootData[lootKey].timerId == timerId then
             lootData[lootKey] = nil
-            for i, data in ipairs(lootFrames) do
-                if data.frame == lootFrame then
-                    table.remove(lootFrames, i)
-                    break
-                end
-            end
             CreateFadeAnimation(lootFrame, false, function()
                 lootFrame:Hide()
                 lootFrame:SetParent(nil)
+                for i, data in ipairs(lootFrames) do
+                    if data.frame == lootFrame then
+                        table.remove(lootFrames, i)
+                        break
+                    end
+                end
                 RepositionFrames()
             end)
         end
