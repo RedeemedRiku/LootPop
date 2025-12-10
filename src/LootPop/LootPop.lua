@@ -27,6 +27,13 @@ local previewFrames = {}
 local timerFrame = CreateFrame("Frame")
 local activeTimers = {}
 
+-- Forge values (const) - copied from AutoDeleteItems
+local FORGE_VALUES = {
+    TITANFORGED = 4096,
+    WARFORGED = 8192,
+    LIGHTFORGED = 12288
+}
+
 local function CreateTimer(delay, callback)
     table.insert(activeTimers, { timeLeft = delay, callback = callback })
 end
@@ -135,20 +142,16 @@ local function CreatePreviewFrame(index)
 end
 
 local function UpdatePreviewFrames()
-    -- Hide all existing preview frames
     for i, frame in ipairs(previewFrames) do
         frame:Hide()
     end
     
-    -- Calculate how many preview frames we need (maxEntries - 1)
     local neededFrames = settings.maxEntries - 1
     
-    -- Create additional frames if needed
     while #previewFrames < neededFrames do
         table.insert(previewFrames, CreatePreviewFrame(#previewFrames + 1))
     end
     
-    -- Position and show the required number of preview frames
     for i = 1, neededFrames do
         local frame = previewFrames[i]
         frame:ClearAllPoints()
@@ -200,7 +203,6 @@ configFrame:SetScript("OnHide", function()
     SaveAllSettings()
     anchor:Hide()
     anchor:EnableMouse(false)
-    -- Hide all preview frames
     for i, frame in ipairs(previewFrames) do
         frame:Hide()
     end
@@ -406,24 +408,32 @@ local itemColors = {
     [6] = {0.9, 0.8, 0.5}
 }
 
-local scanTooltip = CreateFrame("GameTooltip", "LootPopScanTooltip", UIParent, "GameTooltipTemplate")
-scanTooltip:SetOwner(UIParent, "ANCHOR_NONE")
-
-local function GetForgeType(itemLink)
-    scanTooltip:ClearLines()
-    scanTooltip:SetHyperlink(itemLink)
-    for i = 1, scanTooltip:NumLines() do
-        local line = getglobal("LootPopScanTooltipTextLeft" .. i)
-        if line then
-            local text = line:GetText()
-            if text then
-                local lower = text:lower()
-                if lower:find("titanforged") then return "titanforged"
-                elseif lower:find("warforged") then return "warforged"
-                elseif lower:find("lightforged") then return "lightforged" end
-            end
-        end
+-- NEW: Parse item string directly for forge type (faster than tooltip scan)
+local function GetForgeTypeFromItemString(itemLink)
+    if not itemLink then return nil end
+    
+    local itemString = itemLink:match("item:([%-?%d:]+)")
+    if not itemString then return nil end
+    
+    local parts = {strsplit(":", itemString)}
+    local uniqueId = tonumber(parts[8]) or 0
+    
+    if uniqueId >= FORGE_VALUES.LIGHTFORGED then
+        return "lightforged"
+    elseif uniqueId >= FORGE_VALUES.WARFORGED then
+        return "warforged"
+    elseif uniqueId >= FORGE_VALUES.TITANFORGED then
+        return "titanforged"
     end
+    
+    return nil
+end
+
+-- NEW: Check if item has a bounty
+local function HasBounty(itemId)
+    if not itemId then return false end
+    local gold = GetCustomGameData(31, itemId)
+    return gold and gold > 0
 end
 
 local function GetLootKey(itemLink)
@@ -433,7 +443,6 @@ end
 local function RepositionFrames(skipFadingFrames)
     for i, frameData in ipairs(lootFrames) do
         local frame = frameData.frame
-        -- Skip frames that are currently fading out or being destroyed
         if not frame.isFading and not frame.isDestroying then
             if settings.growUp then
                 local targetY = (i - 1) * (frame:GetHeight() + settings.spacing)
@@ -515,7 +524,8 @@ local function CreateLootFrame(itemLink, texture, quantity)
         existingData.textObj:SetText(displayText)
         
         existingData.textObj:SetWidth(0)
-        existingData.frame:SetWidth(math.max(50, existingData.textObj:GetStringWidth() + 33))
+        local baseWidth = existingData.hasBounty and 55 or 33
+        existingData.frame:SetWidth(math.max(50, existingData.textObj:GetStringWidth() + baseWidth))
         
         local timerId = math.random(1000000)
         existingData.timerId = timerId
@@ -538,7 +548,6 @@ local function CreateLootFrame(itemLink, texture, quantity)
         return
     end
     
-    -- Check and remove oldest frame BEFORE creating new one
     RemoveOldestFrame()
     
     local lootFrame = CreateFrame("Frame", nil, UIParent)
@@ -557,7 +566,12 @@ local function CreateLootFrame(itemLink, texture, quantity)
         end
     end
     
-    local forgeType = GetForgeType(itemLink)
+    local forgeType = GetForgeTypeFromItemString(itemLink)
+    
+    local hasBounty = false
+    if itemID then
+        hasBounty = HasBounty(tonumber(itemID))
+    end
     
     local text = lootFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     text:SetFont("Fonts\\FRIZQT__.TTF", 14, "OUTLINE")
@@ -565,17 +579,29 @@ local function CreateLootFrame(itemLink, texture, quantity)
     text:SetText(displayText)
     text:SetTextColor(textColor[1], textColor[2], textColor[3])
     
-    -- Create icon first so text can be positioned relative to it
     local icon = lootFrame:CreateTexture(nil, "ARTWORK")
     icon:SetSize(16, 16)
     icon:SetPoint("LEFT", 7.5, 0)
     icon:SetTexture(texture)
     
-    text:SetPoint("LEFT", icon, "RIGHT", 4, 1)
+    local bountyIcon
+    if hasBounty then
+        bountyIcon = lootFrame:CreateTexture(nil, "OVERLAY")
+        bountyIcon:SetSize(16, 16)
+        bountyIcon:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
+        -- Position bounty coin after item icon: 7.5 (icon left) + 16 (icon width) + 4 (gap) = 27.5
+        bountyIcon:SetPoint("LEFT", lootFrame, "LEFT", 28, 0)
+        -- Position text after bounty coin: 31.5 (coin left) + 16 (coin width) + 4 (gap) = 51.5
+        text:SetPoint("LEFT", lootFrame, "LEFT", 41, 1)
+    else
+        -- Position text after item icon (normal behavior)
+        text:SetPoint("LEFT", icon, "RIGHT", 4, 1)
+    end
+    
     text:SetWidth(0)
     
-    -- Now measure the text width after it's positioned
-    local frameWidth = math.max(50, text:GetStringWidth() + 33)
+    local baseWidth = hasBounty and 55 or 33
+    local frameWidth = math.max(50, text:GetStringWidth() + baseWidth)
     
     lootFrame:SetSize(frameWidth, 32)
     lootFrame:SetBackdrop({
@@ -599,20 +625,6 @@ local function CreateLootFrame(itemLink, texture, quantity)
         lootFrame:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
     end
     
-    local forgeColors = {
-        titanforged = {{0.35, 0.35, 0.7, 1}, {0.42, 0.49, 0.63, 1}},
-        warforged = {{0.7, 0.36, 0.31, 1}, {0.7, 0.36, 0.31, 1}},
-        lightforged = {{0.67, 0.67, 0.49, 1}, {0.67, 0.67, 0.49, 1}}
-    }
-    
-    if forgeType and forgeColors[forgeType] then
-        lootFrame:SetBackdropColor(unpack(forgeColors[forgeType][1]))
-        lootFrame:SetBackdropBorderColor(unpack(forgeColors[forgeType][2]))
-    else
-        lootFrame:SetBackdropColor(0, 0, 0, 1)
-        lootFrame:SetBackdropBorderColor(0.5, 0.5, 0.5, 1)
-    end
-    
     local frameData = { frame = lootFrame, key = lootKey }
     local timerId = math.random(1000000)
     
@@ -621,6 +633,7 @@ local function CreateLootFrame(itemLink, texture, quantity)
         textObj = text,
         quantity = quantity,
         timerId = timerId,
+        hasBounty = hasBounty,
     }
     
     table.insert(lootFrames, 1, frameData)
