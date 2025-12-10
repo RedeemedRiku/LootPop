@@ -457,21 +457,48 @@ local function RepositionFrames(skipFadingFrames)
     end
 end
 
+-- Reusable fade frame to prevent creating new frames constantly (MEMORY LEAK FIX)
+local fadeFrame = CreateFrame("Frame")
+local activeFades = {}
+
 local function CreateFadeAnimation(frame, fadeIn, callback)
-    local fadeTimer = 0
-    local fadeFrame = CreateFrame("Frame")
-    
-    fadeFrame:SetScript("OnUpdate", function(self, elapsed)
-        fadeTimer = fadeTimer + elapsed
-        local alpha = fadeIn and (fadeTimer / 0.3) or (1 - fadeTimer / 0.3)
-        if (fadeIn and alpha >= 1) or (not fadeIn and alpha <= 0) then
-            frame:SetAlpha(fadeIn and 1 or 0)
-            fadeFrame:SetScript("OnUpdate", nil)
-            if callback then callback() end
-        else
-            frame:SetAlpha(alpha)
+    -- Cancel any existing fade on this frame
+    for i = #activeFades, 1, -1 do
+        if activeFades[i].frame == frame then
+            table.remove(activeFades, i)
         end
-    end)
+    end
+    
+    table.insert(activeFades, {
+        frame = frame,
+        fadeTimer = 0,
+        fadeIn = fadeIn,
+        callback = callback
+    })
+    
+    -- Start the fade processor if not already running
+    if not fadeFrame:GetScript("OnUpdate") then
+        fadeFrame:SetScript("OnUpdate", function(self, elapsed)
+            for i = #activeFades, 1, -1 do
+                local fade = activeFades[i]
+                fade.fadeTimer = fade.fadeTimer + elapsed
+                local alpha = fade.fadeIn and (fade.fadeTimer / 0.3) or (1 - fade.fadeTimer / 0.3)
+                
+                if (fade.fadeIn and alpha >= 1) or (not fade.fadeIn and alpha <= 0) then
+                    fade.frame:SetAlpha(fade.fadeIn and 1 or 0)
+                    if fade.callback then fade.callback() end
+                    table.remove(activeFades, i)
+                else
+                    fade.frame:SetAlpha(alpha)
+                end
+            end
+            
+            -- Stop processor if no active fades
+            if #activeFades == 0 then
+                self:SetScript("OnUpdate", nil)
+            end
+        end)
+    end
 end
 
 local function RemoveOldestFrame()
@@ -586,21 +613,18 @@ local function CreateLootFrame(itemLink, texture, quantity)
     
     local bountyIcon
     if hasBounty then
-        bountyIcon = lootFrame:CreateTexture(nil, "OVERLAY")
+        bountyIcon = lootFrame:CreateTexture(nil, "ARTWORK")
         bountyIcon:SetSize(16, 16)
-        bountyIcon:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
-        -- Position bounty coin after item icon: 7.5 (icon left) + 16 (icon width) + 4 (gap) = 27.5
-        bountyIcon:SetPoint("LEFT", lootFrame, "LEFT", 28, 0)
-        -- Position text after bounty coin: 31.5 (coin left) + 16 (coin width) + 4 (gap) = 51.5
-        text:SetPoint("LEFT", lootFrame, "LEFT", 41, 1)
+        bountyIcon:SetPoint("LEFT", icon, "RIGHT", 2, 0)
+        bountyIcon:SetTexture("Interface\\Icons\\INV_Misc_Coin_01")
+        text:SetPoint("LEFT", bountyIcon, "RIGHT", 4, 1)
     else
-        -- Position text after item icon (normal behavior)
         text:SetPoint("LEFT", icon, "RIGHT", 4, 1)
     end
     
     text:SetWidth(0)
     
-    local baseWidth = hasBounty and 48 or 33
+    local baseWidth = hasBounty and 55 or 33
     local frameWidth = math.max(50, text:GetStringWidth() + baseWidth)
     
     lootFrame:SetSize(frameWidth, 32)
