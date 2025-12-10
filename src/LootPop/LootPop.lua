@@ -600,7 +600,7 @@ local function CreateLootFrame(itemLink, texture, quantity)
     
     text:SetWidth(0)
     
-    local baseWidth = hasBounty and 55 or 33
+    local baseWidth = hasBounty and 48 or 33
     local frameWidth = math.max(50, text:GetStringWidth() + baseWidth)
     
     lootFrame:SetSize(frameWidth, 32)
