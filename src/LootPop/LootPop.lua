@@ -393,9 +393,7 @@ end)
 
 SLASH_LOOTPOP1 = "/lootpop"
 SlashCmdList["LOOTPOP"] = function(msg)
-    if msg == "config" then
-        configFrame:Show()
-    end
+    configFrame:Show()
 end
 
 local itemColors = {
