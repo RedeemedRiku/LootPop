@@ -34,8 +34,8 @@ local FORGE_VALUES = {
     LIGHTFORGED = 12288
 }
 
-local function CreateTimer(delay, callback)
-    table.insert(activeTimers, { timeLeft = delay, callback = callback })
+local function CreateTimer(delay, callback, id)
+    table.insert(activeTimers, { timeLeft = delay, callback = callback, id = id })
 end
 
 timerFrame:SetScript("OnUpdate", function(self, elapsed)
@@ -569,7 +569,7 @@ local function CreateLootFrame(itemLink, texture, quantity)
                     RepositionFrames()
                 end)
             end
-        end)
+        end, timerId)
         return
     end
     
@@ -614,15 +614,15 @@ local function CreateLootFrame(itemLink, texture, quantity)
         bountyIcon = lootFrame:CreateTexture(nil, "ARTWORK")
         bountyIcon:SetSize(16, 16)
         bountyIcon:SetPoint("LEFT", icon, "RIGHT", 2, 0)
-        bountyIcon:SetTexture("Interface\\Icons\\INV_Misc_Coin_01")
-        text:SetPoint("LEFT", bountyIcon, "RIGHT", 4, 1)
+        bountyIcon:SetTexture("Interface\\MoneyFrame\\UI-GoldIcon")
+        text:SetPoint("LEFT", bountyIcon, "RIGHT", 0, 1)
     else
         text:SetPoint("LEFT", icon, "RIGHT", 4, 1)
     end
     
     text:SetWidth(0)
     
-    local baseWidth = hasBounty and 55 or 33
+    local baseWidth = hasBounty and 47 or 33
     local frameWidth = math.max(50, text:GetStringWidth() + baseWidth)
     
     lootFrame:SetSize(frameWidth, 32)
@@ -678,7 +678,7 @@ local function CreateLootFrame(itemLink, texture, quantity)
                 RepositionFrames()
             end)
         end
-    end)
+    end, timerId)
 end
 
 f:RegisterEvent("CHAT_MSG_LOOT")
@@ -720,7 +720,9 @@ f:SetScript("OnEvent", function(self, event, arg1)
     if arg1:find("You receive loot:") or arg1:find("You receive item:") or arg1:find("You create:") then
         local itemLink = arg1:match("|c%x+|Hitem.-|h%[.-%]|h|r")
         if itemLink then
-            local quantity = tonumber(arg1:match("x(%d+)")) or 1
+            -- Extract quantity only from text AFTER the item link, not from within the item name
+            local afterLink = arg1:match("|c%x+|Hitem.-|h%[.-%]|h|r(.*)") or ""
+            local quantity = tonumber(afterLink:match("x(%d+)")) or 1
             local itemID = itemLink:match("item:(%d+)")
             if itemID then
                 local _, _, _, _, _, _, _, _, _, texture = GetItemInfo(itemID)
