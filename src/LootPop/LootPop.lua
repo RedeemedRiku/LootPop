@@ -52,8 +52,9 @@ end)
 local function SaveAllSettings()
     local left, top = anchor:GetLeft(), anchor:GetTop()
     if left and top then
-        LootPopDB.anchorX = math.floor(left * 100 + 0.5) / 100
-        LootPopDB.anchorY = math.floor((top - UIParent:GetHeight()) * 100 + 0.5) / 100
+        local scale = anchor:GetScale()
+        LootPopDB.anchorX = math.floor(left * scale * 100 + 0.5) / 100
+        LootPopDB.anchorY = math.floor((top * scale - UIParent:GetHeight()) * 100 + 0.5) / 100
     end
     LootPopDB.scale = settings.scale
     LootPopDB.spacing = settings.spacing
@@ -67,8 +68,9 @@ local function LoadAllSettings()
     anchor:ClearAllPoints()
     local x = type(LootPopDB.anchorX) == "number" and LootPopDB.anchorX or 842
     local y = type(LootPopDB.anchorY) == "number" and LootPopDB.anchorY or -300
-    anchor:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x, y)
-    anchor:SetScale(LootPopDB.scale or 1.0)
+    local scale = type(LootPopDB.scale) == "number" and LootPopDB.scale or 1.0
+    anchor:SetScale(scale)
+    anchor:SetPoint("TOPLEFT", UIParent, "TOPLEFT", x / scale, y / scale)
     
     settings.scale = type(LootPopDB.scale) == "number" and LootPopDB.scale or 1.0
     settings.spacing = type(LootPopDB.spacing) == "number" and LootPopDB.spacing or 0
@@ -81,7 +83,7 @@ end
 anchor = CreateFrame("Frame", nil, UIParent)
 anchor:SetSize(250, 32)
 anchor:SetScale(settings.scale)
-anchor:SetPoint("TOPLEFT", UIParent, "TOPLEFT", LootPopDB.anchorX or 842, LootPopDB.anchorY or -300)
+anchor:SetPoint("TOPLEFT", UIParent, "TOPLEFT", (LootPopDB.anchorX or 842) / settings.scale, (LootPopDB.anchorY or -300) / settings.scale)
 anchor:SetMovable(true)
 anchor:EnableMouse(false)
 anchor:RegisterForDrag("LeftButton")
